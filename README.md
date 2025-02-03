@@ -4,8 +4,8 @@ This project implements an APB (Advanced Peripheral Bus) master and slave interf
 ## Project Structure
 
 - `rtl/` - Contains the RTL implementation.
-  - [`apb_master.md`](rtl/apb_master.md) - Documentation for the APB Master module.
-  - [`apb_slave.md`](rtl/apb_slave.md) - Documentation for the APB slave module.
+  - [`apb_master.md`](docs/apb_master.md) - Documentation for the APB Master module.
+  - [`apb_slave.md`](docs/apb_slave.md) - Documentation for the APB slave module.
 
 
 ## Future Work
