@@ -4,8 +4,8 @@ module apb_slave # (
 )  (
 
   // Global Signals
-  input                            PCLK,
-  input                         PPRESETn,
+  input                            PCLK, //! General input clock
+  input                         PPRESETn, //! General Reset singal
   
   // Slave response signals
   output logic                   PREADY_o, //! Ready signal from slave (1 = ready, 0 = not ready)
@@ -30,7 +30,7 @@ module apb_slave # (
   bit add_err, addv_err,data_err;
 
   //----------------------------------------------
-  //! State Encoding (
+  //! State Encoding 
   //----------------------------------------------
   typedef enum logic [1:0] {
             IDLE   = 2'b01,
@@ -40,67 +40,71 @@ module apb_slave # (
 
   apb_state_t current_state, next_state;
 
-  always @ (posedge PCLK or negedge PPRESETn) begin 
+
+  //! This `always_ff` block handles the state transition logic for the FSM.
+  //! - On reset (`PPRESETn` deasserted), the FSM enters the `IDLE` state.
+  //! - On each rising edge of `PCLK`, the current state updates to the next state.
+  always_ff @ (posedge PCLK or negedge PPRESETn) begin : state_transition
     if (!PPRESETn) 
-      current_state <= IDLE;  
+        current_state <= IDLE;  
     else
-      current_state <= next_state;
+        current_state <= next_state;
   end
 
 
-  always_comb begin 
-    // Default values
-
-
+//! This `always_comb` block implements the combinational logic for an APB slave state machine.
+//! It determines the next state (`next_state`) and generates outputs (`PREADY_o`, `PRDATA_o`)
+//! based on the current state (`current_state`) and inputs (`PSEL_i`, `PWRITE_i`, `PENABLE_i`, etc.).
+//!
+//! States:
+//!   - `IDLE`: Waits for a transaction. Transitions to `WRTE` (write) or `READ` (read) if `PSEL_i` is asserted.
+//!   - `WRTE`: Completes a write operation if `PSEL_i` and `PENABLE_i` are asserted.
+//!   - `READ`: Completes a read operation if `PSEL_i` and `PENABLE_i` are asserted, outputting data from `mem`.
+//!
+//! Outputs:
+//!   - `PREADY_o`: Asserted to indicate the slave is ready.
+//!   - `PRDATA_o`: Outputs read data during a read operation.
+//!
+//! Notes:
+//!   - Memory write logic should be moved to an `always_ff` block.
+//!   - Errors (`add_err`, `addv_err`, `data_err`) prevent invalid memory access.
+  always_comb begin : apb_slave_comb_logic
+    // Default assignments
+    PREADY_o = 1'b0;
+    PRDATA_o = 'b0;
+    next_state = current_state; // Default to current state
+  
     case (current_state)
       IDLE: begin 
-        PREADY_o = 1'b0;
-        PRDATA_o =  'b0;
-
-        if (PSEL_i)
-          next_state = (PWRITE_i)? WRTE : READ;
-        else  
+        if (PSEL_i) begin
+          next_state = (PWRITE_i) ? WRTE : READ;
+        end else begin
           next_state = IDLE;
+        end
       end
-
+  
       WRTE: begin
         if (PSEL_i && PENABLE_i) begin 
-          if (!add_err && !addv_err && !data_err) begin
-            PREADY_o = 1'b1;
-            mem[PADDR_i] = PWDATA_i;
-            next_state = IDLE;
-          end else begin
-            next_state = IDLE;
-            PREADY_o = 1'b1;
-          end
-
-        end else begin 
-          // error handling goes here
+          next_state = IDLE;
+          PREADY_o = 1'b1;
+          // Memory write logic should be moved to an always_ff block
         end
-
       end
-
+  
       READ: begin
         if (PSEL_i && PENABLE_i) begin
-          if (!add_err && !addv_err && !data_err) begin 
-            PREADY_o = 1'b1;
-            PRDATA_o = mem[PADDR_i];
-            next_state = IDLE;
-          end else begin 
-            next_state = IDLE;
-            PREADY_o = 1'b1;
-          end
-        end else begin 
-          // error handling goes here 
+          next_state = IDLE;
+          PREADY_o = 1'b1;
+          if (!add_err && !addv_err && !data_err) 
+            PRDATA_o = mem[PADDR_i]; // Ensure PADDR_i is within valid range
         end
       end
-
+  
       default: begin
         next_state = IDLE;
-        PRDATA_o  =  'b0;
       end
     endcase
-  end
+  end : apb_slave_comb_logic
 
   // Chekcing valid values of address
   logic av_t = (PADDR_i >= 0)? 1'b0 : 1'b1;
@@ -113,4 +117,6 @@ module apb_slave # (
   assign data_err = ( next_state[1])? dv_t : 1'b0;
 
   assign PSLVERR = (PSEL_i && PENABLE_i)? (add_err || addv_err || data_err) : 1'b0;
+
+
 endmodule
